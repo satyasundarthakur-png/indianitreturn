@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { useStore } from '@/lib/itr/store';
+import { useStore as _useStore } from '@/lib/itr/store';
+import { useShallow } from 'zustand/react/shallow';
+const useStore = (sel) => _useStore(useShallow(sel));
 import { derive, CFG, FF, INR } from '@/lib/itr/taxEngine';
 import { NumField, Toggle, Section, Box, Grid2 } from './shared/Fields';
 import api from '@/lib/itr/api';
