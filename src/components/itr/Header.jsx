@@ -5,10 +5,13 @@ import api from '@/lib/itr/api';
 const NAVY = '#0D1B2A';
 
 export default function Header() {
-  const { user, logout, getState, profile: P } = useStore(s => ({
-    user: s.user, logout: s.logout, getState: s.getState, profile: s.profile,
-  }));
-  const state = useStore(s => ({ profile: s.profile, income: s.income, ded: s.ded }));
+  const user = useStore(s => s.user);
+  const logout = useStore(s => s.logout);
+  const getState = useStore(s => s.getState);
+  const P = useStore(s => s.profile);
+  const income = useStore(s => s.income);
+  const ded = useStore(s => s.ded);
+  const state = { profile: P, income, ded };
   const d = derive(state);
   const cfg = CFG();
   const newWins = d.savings >= 0;
