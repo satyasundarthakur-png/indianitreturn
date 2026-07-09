@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { useStore } from '../store';
-import { derive, CFG, FF, INR } from '../taxEngine';
+import { useStore } from '@/lib/itr/store';
+import { derive, CFG, FF, INR } from '@/lib/itr/taxEngine';
 import { NumField, Toggle, Section, Box, Grid2 } from './shared/Fields';
-import api from '../api';
+import api from '@/lib/itr/api';
 
 /* ─── PROFILE ─────────────────────────────────────────────────────────────── */
 export function ProfileTab() {

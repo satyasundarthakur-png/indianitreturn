@@ -1,6 +1,6 @@
-import { useStore } from '../store';
-import { derive, INR, CFG } from '../taxEngine';
-import api from '../api';
+import { useStore } from '@/lib/itr/store';
+import { derive, INR, CFG } from '@/lib/itr/taxEngine';
+import api from '@/lib/itr/api';
 
 export default function Header() {
   const { user, logout, getState, profile: P } = useStore(s => ({
