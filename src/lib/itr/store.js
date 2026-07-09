@@ -22,6 +22,10 @@ const defaultIncome = {
   stcg15:0,stcgOther:0,ltcg10:0,ltcgOther:0,
   fdInterest:0,savingsInterest:0,dividends:0,otherIncome:0,onlineGaming:0,
   tdsPaid:0,
+  advTaxPaid:0,
+  selfAssessDate:'2026-07-10',
+  advTaxPaid:0,
+  selfAssessDate:'2026-07-10',
 };
 
 const defaultDed = {

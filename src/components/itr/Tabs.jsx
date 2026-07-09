@@ -212,7 +212,18 @@ export function IncomeTab() {
           <NumField label="Other income" value={I.otherIncome} onChange={v=>setIncome({otherIncome:v})} />
         </Grid2>
         <NumField label="Online gaming winnings" value={I.onlineGaming} onChange={v=>setIncome({onlineGaming:v})} hint="Taxed at flat 30% + cess. No deduction allowed." />
-        <NumField label="TDS / advance tax already paid" value={I.tdsPaid} onChange={v=>setIncome({tdsPaid:v})} hint="From Form 26AS / AIS" />
+        <NumField label="TDS deducted (from 26AS / AIS)" value={I.tdsPaid} onChange={v=>setIncome({tdsPaid:v})} hint="Total TDS by employer, banks, etc. — do NOT include advance tax here" />
+        <NumField label="Advance tax self-deposited (challans)" value={I.advTaxPaid} onChange={v=>setIncome({advTaxPaid:v})} hint="Total paid via income tax challan 280 during FY 2025-26" />
+        <div className="mb-4">
+          <label className="block text-xs font-semibold mb-1.5 tracking-wide uppercase" style={{color:'#6B7A99',letterSpacing:'0.06em'}}>
+            Self-assessment tax payment date
+          </label>
+          <input type="date" value={I.selfAssessDate||'2026-07-10'} min="2026-04-01" max="2027-03-31"
+            onChange={e=>setIncome({selfAssessDate:e.target.value})}
+            className="w-full rounded-xl px-4 py-2.5 text-sm font-semibold"
+            style={{background:'#F7F9FC',border:'1.5px solid #D8DEE8',color:'#0D1B2A'}} />
+          <p className="text-xs mt-1.5" style={{color:'#9AAABB'}}>Used to calculate 234B interest (1%/month from 1 Apr 2026 to this date)</p>
+        </div>
       </Section>
     </div>
   );
@@ -286,6 +297,127 @@ export function DeductionsTab() {
 }
 
 /* ─── COMPARE ─────────────────────────────────────────────────────────────── */
+/* ─── INTEREST PANEL (234B + 234C) ───────────────────────────────────────── */
+function InterestPanel({ s234B, s234C, totalTax, tds, advTax, netPayable }) {
+  const prepaid = tds + advTax;
+  const rows = [
+    ['Total tax liability', FF(totalTax), ''],
+    ['Less: TDS deducted', `(${FF(tds)})`, 'text-emerald-700'],
+    ...(advTax > 0 ? [['Less: Advance tax paid', `(${FF(advTax)})`, 'text-emerald-700']] : []),
+    ['Balance before interest', FF(Math.max(0, totalTax - prepaid)), 'font-bold'],
+    ...(s234B.applicable ? [['Add: Interest u/s 234B', `+${FF(s234B.interest)}`, 'text-red-600']] : []),
+    ...(s234C.applicable ? [['Add: Interest u/s 234C', `+${FF(s234C.interest)}`, 'text-red-600']] : []),
+  ];
+
+  return (
+    <div>
+      {/* Summary cards */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="rounded-xl p-3 text-center" style={{background:'#FFF7ED',border:'1.5px solid #FED7AA'}}>
+          <div className="text-xs font-semibold uppercase tracking-wide mb-1" style={{color:'#C2410C'}}>234B Interest</div>
+          <div className="text-xl font-black tabular" style={{color:'#9A3412'}}>{FF(s234B.interest)}</div>
+          {s234B.applicable
+            ? <div className="text-xs mt-1" style={{color:'#C2410C'}}>{s234B.months} month{s234B.months!==1?'s':''} × 1%</div>
+            : <div className="text-xs mt-1" style={{color:'#16A34A'}}>Not applicable</div>}
+        </div>
+        <div className="rounded-xl p-3 text-center" style={{background:'#FFF7ED',border:'1.5px solid #FED7AA'}}>
+          <div className="text-xs font-semibold uppercase tracking-wide mb-1" style={{color:'#C2410C'}}>234C Interest</div>
+          <div className="text-xl font-black tabular" style={{color:'#9A3412'}}>{FF(s234C.interest)}</div>
+          {s234C.applicable
+            ? <div className="text-xs mt-1" style={{color:'#C2410C'}}>4 installments</div>
+            : <div className="text-xs mt-1" style={{color:'#16A34A'}}>Not applicable</div>}
+        </div>
+        <div className="rounded-xl p-3 text-center" style={{
+          background: netPayable>0 ? '#FEF2F2' : '#F0FDF4',
+          border: `1.5px solid ${netPayable>0?'#FECACA':'#BBF7D0'}`}}>
+          <div className="text-xs font-semibold uppercase tracking-wide mb-1" style={{color:netPayable>0?'#991B1B':'#14532D'}}>
+            {netPayable > 0 ? 'Total Payable' : 'Refund Due'}
+          </div>
+          <div className="text-xl font-black tabular" style={{color:netPayable>0?'#7F1D1D':'#14532D'}}>{FF(Math.abs(netPayable))}</div>
+          <div className="text-xs mt-1" style={{color:netPayable>0?'#991B1B':'#14532D'}}>
+            {netPayable>0 ? 'pay now' : 'claim refund'}
+          </div>
+        </div>
+      </div>
+
+      {/* Computation waterfall */}
+      <div className="rounded-xl overflow-hidden mb-4" style={{border:'1.5px solid #E8EDF4'}}>
+        <table className="w-full text-xs">
+          <tbody>
+            {rows.map(([label, value, cls], i) => (
+              <tr key={label} style={{background: i%2===0?'#F7F9FC':'white'}}>
+                <td className="px-3 py-2" style={{color:'#374151'}}>{label}</td>
+                <td className={`px-3 py-2 text-right font-bold tabular ${cls}`}>{value}</td>
+              </tr>
+            ))}
+            <tr style={{background:'#0D1B2A'}}>
+              <td className="px-3 py-2 font-bold text-white">{netPayable>=0?'NET TAX PAYABLE':'REFUND DUE'}</td>
+              <td className="px-3 py-2 text-right font-black tabular text-white">{FF(Math.abs(netPayable))}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* 234B detail */}
+      {s234B.applicable && (
+        <div className="rounded-xl p-3 mb-3" style={{background:'#FFFBEB',border:'1.5px solid #FDE68A'}}>
+          <div className="text-xs font-bold mb-2" style={{color:'#92400E'}}>📌 Section 234B — Default in Advance Tax</div>
+          <div className="grid grid-cols-2 gap-2 text-xs" style={{color:'#78350F'}}>
+            <div>Deficit (tax − prepaid)</div><div className="text-right font-bold tabular">{FF(s234B.deficit)}</div>
+            <div>Interest base (↓ to ₹100)</div><div className="text-right font-bold tabular">{FF(s234B.base)}</div>
+            <div>Period (1 Apr 2026 → pay date)</div><div className="text-right font-bold">{s234B.months} month{s234B.months!==1?'s':''}</div>
+            <div>Interest = base × 1% × months</div><div className="text-right font-bold tabular text-red-700">{FF(s234B.interest)}</div>
+          </div>
+        </div>
+      )}
+      {!s234B.applicable && (
+        <Box type="success">✓ 234B exempt — {s234B.reason}</Box>
+      )}
+
+      {/* 234C detail */}
+      {s234C.applicable && s234C.breakdown?.length > 0 && (
+        <div className="rounded-xl overflow-hidden mb-3" style={{border:'1.5px solid #FDE68A'}}>
+          <div className="px-3 py-2 text-xs font-bold" style={{background:'#FFFBEB',color:'#92400E'}}>
+            📌 Section 234C — Deferment of Installments (Advance tax base: {FF(s234C.advBase)})
+          </div>
+          <table className="w-full text-xs">
+            <thead>
+              <tr style={{background:'#FEF9C3'}}>
+                <th className="px-3 py-1.5 text-left" style={{color:'#713F12'}}>Due date</th>
+                <th className="px-3 py-1.5 text-right" style={{color:'#713F12'}}>Required</th>
+                <th className="px-3 py-1.5 text-right" style={{color:'#713F12'}}>Paid</th>
+                <th className="px-3 py-1.5 text-right" style={{color:'#713F12'}}>Shortfall</th>
+                <th className="px-3 py-1.5 text-right" style={{color:'#713F12'}}>Interest</th>
+              </tr>
+            </thead>
+            <tbody>
+              {s234C.breakdown.map((row, i) => (
+                <tr key={row.label} style={{background:i%2===0?'white':'#FFFBEB'}}>
+                  <td className="px-3 py-1.5" style={{color:'#374151'}}>{row.label}</td>
+                  <td className="px-3 py-1.5 text-right tabular" style={{color:'#374151'}}>{FF(row.required)}</td>
+                  <td className="px-3 py-1.5 text-right tabular" style={{color:'#16A34A'}}>{FF(row.paid)}</td>
+                  <td className="px-3 py-1.5 text-right tabular" style={{color:'#DC2626'}}>{FF(row.shortfall)}</td>
+                  <td className="px-3 py-1.5 text-right tabular font-bold" style={{color:'#9A3412'}}>{FF(row.interest)}</td>
+                </tr>
+              ))}
+              <tr style={{background:'#FEF9C3'}}>
+                <td colSpan={4} className="px-3 py-1.5 font-bold text-right" style={{color:'#713F12'}}>Total 234C Interest</td>
+                <td className="px-3 py-1.5 text-right font-black tabular" style={{color:'#9A3412'}}>{FF(s234C.interest)}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div className="px-3 py-2 text-xs" style={{color:'#92400E',background:'#FFFBEB'}}>
+            * Assumes advance tax was paid as lump sum at/after 15 Mar 2026. If paid in earlier installments, actual 234C will be lower.
+          </div>
+        </div>
+      )}
+      {!s234C.applicable && (
+        <Box type="success">✓ 234C exempt — {s234C.reason}</Box>
+      )}
+    </div>
+  );
+}
+
 export function CompareTab() {
   const state = useStore(s => ({ profile: s.profile, income: s.income, ded: s.ded }));
   const d = derive(state);
@@ -366,19 +498,44 @@ export function CompareTab() {
         <Box type="success">✓ {cfg.note||`Rebate u/s 87A: Zero tax up to ₹12L income. Marginal relief up to ₹12.75L.`}</Box>
       </Section>
 
-      {/* Advance tax */}
+      {/* Advance tax schedule */}
       {rn > 10000 && (
-        <Section title="🗓 Advance Tax Schedule (New Regime)">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[[cfg.adv1,'15%',rn*.15],[cfg.adv2,'45%',rn*.45],[cfg.adv3,'75%',rn*.75],[cfg.adv4,'100%',rn]].map(([dt,p,a]) => (
-              <div key={dt} className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center">
-                <div className="text-xs text-slate-400">{dt}</div>
-                <div className="text-xs font-semibold text-slate-500">{p}</div>
-                <div className="text-sm font-bold text-slate-800 mt-1">{FF(a)}</div>
-              </div>
-            ))}
-          </div>
-          <Box type="info">Interest u/s 234B/234C if advance tax not paid on time. Salaried employees with only TDS are exempt.</Box>
+        <Section title="🗓 Advance Tax Installment Schedule (New Regime)">
+          {(() => {
+            const advBase = Math.max(0, rn - (state.income.tdsPaid||0));
+            return (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                  {[[cfg.adv1,'15%',advBase*.15],[cfg.adv2,'45%',advBase*.45],[cfg.adv3,'75%',advBase*.75],[cfg.adv4,'100%',advBase]].map(([dt,p,a]) => (
+                    <div key={dt} className="rounded-xl p-3 text-center" style={{background:'#F0F4FA',border:'1.5px solid #D8DEE8'}}>
+                      <div className="text-xs" style={{color:'#9AAABB'}}>{dt}</div>
+                      <div className="text-xs font-semibold mt-0.5" style={{color:'#6B7A99'}}>{p} due</div>
+                      <div className="text-sm font-black mt-1" style={{color:'#0D1B2A'}}>{FF(a)}</div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs mb-1" style={{color:'#9AAABB'}}>
+                  Advance tax base = Total tax ({FF(rn)}) − TDS ({FF(state.income.tdsPaid||0)}) = <strong>{FF(advBase)}</strong>
+                </p>
+              </>
+            );
+          })()}
+        </Section>
+      )}
+
+      {/* 234B / 234C Interest Computation */}
+      {rn > 10000 && (
+        <Section title="⏱ Interest u/s 234B & 234C — New Regime">
+          <InterestPanel s234B={d.s234B_new} s234C={d.s234C_new} totalTax={rn}
+            tds={state.income.tdsPaid||0} advTax={state.income.advTaxPaid||0}
+            netPayable={d.netPayableNew} />
+        </Section>
+      )}
+      {ro > 10000 && (
+        <Section title="⏱ Interest u/s 234B & 234C — Old Regime">
+          <InterestPanel s234B={d.s234B_old} s234C={d.s234C_old} totalTax={ro}
+            tds={state.income.tdsPaid||0} advTax={state.income.advTaxPaid||0}
+            netPayable={d.netPayableOld} />
         </Section>
       )}
     </div>

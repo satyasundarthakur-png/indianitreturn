@@ -49,6 +49,111 @@ function computeRegime(taxable,slabs,surBrackets,rebateLimit,isNri){
   return{slab,rebate,sur,cess,marginalRelief};
 }
 
+/* ── Interest Calculation Helpers ──────────────────────────────────────────── */
+
+/**
+ * Count months (or part thereof) between two dates.
+ * Under IT Act: any part of a month counts as a full month.
+ * e.g. April 1 → July 10 = 4 months (April, May, June = 3 full + 10 days July = 1 more)
+ */
+function countMonths(fromDate, toDate){
+  if(!toDate||toDate<=fromDate) return 0;
+  const fy = fromDate.getFullYear(), fm = fromDate.getMonth(), fd = fromDate.getDate();
+  const ty = toDate.getFullYear(),   tm = toDate.getMonth(),   td = toDate.getDate();
+  let months = (ty - fy)*12 + (tm - fm);
+  if(td > fd) months += 1; // partial month in the last month = full month
+  return Math.max(1, months);
+}
+
+/**
+ * Section 234B — Interest for default in payment of advance tax.
+ *
+ * Applicable when:
+ *   • Total tax liability > ₹10,000 AND
+ *   • (TDS paid + advance tax self-deposited) < 90% of total tax
+ *
+ * Interest = 1% per month (or part) on shortfall (rounded down to nearest ₹100)
+ * Period   = 1 April of AY (2026-04-01) → date of self-assessment payment
+ *
+ * @param {number} totalTax  - Total assessed tax
+ * @param {number} tds       - TDS already deducted (from 26AS/AIS)
+ * @param {number} advTax    - Advance tax self-deposited (challans)
+ * @param {string} payDateStr- ISO date string of self-assessment payment (YYYY-MM-DD)
+ */
+function interest234B(totalTax, tds, advTax, payDateStr){
+  const totalPrepaid = (tds||0) + (advTax||0);
+
+  if(totalTax <= 10000)
+    return { applicable:false, reason:'Tax ≤ ₹10,000 — exempt', interest:0, months:0, deficit:0, base:0 };
+
+  if(totalPrepaid >= Math.ceil(totalTax * 0.90))
+    return { applicable:false, reason:'Prepaid ≥ 90% of tax — no 234B', interest:0, months:0,
+             deficit:Math.max(0, totalTax-totalPrepaid), base:0 };
+
+  const deficit = Math.max(0, totalTax - totalPrepaid);
+  const base    = Math.floor(deficit/100)*100;          // Round DOWN to nearest ₹100
+  const ayStart = new Date(2026,3,1);                   // 1 April 2026
+  const payDate = payDateStr ? new Date(payDateStr) : new Date();
+  const months  = countMonths(ayStart, payDate);
+  const interest= Math.round(base * 0.01 * months);
+
+  return { applicable:true, interest, months, deficit, base,
+           reason:`Prepaid (${totalPrepaid.toLocaleString('en-IN')}) < 90% of tax` };
+}
+
+/**
+ * Section 234C — Interest for deferment of advance tax installments.
+ *
+ * Applicable when advance tax net of TDS (= totalTax − TDS) > ₹10,000
+ *
+ * Due-date schedule (of advance tax net of TDS):
+ *   15 Jun 2025 → 15% cumulative  → interest 3 months on shortfall
+ *   15 Sep 2025 → 45% cumulative  → interest 3 months on shortfall
+ *   15 Dec 2025 → 75% cumulative  → interest 3 months on shortfall
+ *   15 Mar 2026 → 100% cumulative → interest 1 month  on shortfall
+ *
+ * Shortfall at each date = (required cumulative − advance tax self-deposited by that date)
+ * We conservatively assume advance tax was paid as a lump-sum at/after 15 Mar 2026
+ * (i.e., 0 paid at Jun/Sep/Dec installment dates).
+ * Interest base rounded DOWN to nearest ₹100.
+ *
+ * @param {number} totalTax - Total assessed tax
+ * @param {number} tds      - TDS deducted (reduces advance tax base)
+ * @param {number} advTax   - Total advance tax self-deposited
+ */
+function interest234C(totalTax, tds, advTax){
+  const advBase = Math.max(0, totalTax - (tds||0)); // Advance tax payable net of TDS
+
+  if(totalTax <= 10000 || advBase <= 0)
+    return { applicable:false, interest:0, breakdown:[], reason:'Tax ≤ ₹10,000 or TDS covers all' };
+
+  // Installments: pct of advBase due by each date; intMonths for interest calculation
+  // cumPaid: advance tax self-deposited cumulatively by each date
+  // Assumption: user paid advTax as lump sum at/after Mar 15
+  const AT = advTax||0;
+  const schedule = [
+    { label:'15 Jun 2025 (15%)', pct:0.15, cumPaid:0,  intMonths:3 },
+    { label:'15 Sep 2025 (45%)', pct:0.45, cumPaid:0,  intMonths:3 },
+    { label:'15 Dec 2025 (75%)', pct:0.75, cumPaid:0,  intMonths:3 },
+    { label:'15 Mar 2026 (100%)',pct:1.00, cumPaid:AT, intMonths:1 },
+  ];
+
+  let total = 0;
+  const breakdown = schedule.map(inst => {
+    const required  = Math.round(advBase * inst.pct);
+    const shortfall = Math.max(0, required - inst.cumPaid);
+    const base      = Math.floor(shortfall/100)*100;
+    const interest  = Math.round(base * 0.01 * inst.intMonths);
+    total += interest;
+    return { label:inst.label, required, paid:inst.cumPaid, shortfall, base, interest };
+  });
+
+  return { applicable: total>0, interest:total, breakdown,
+           advBase, reason:'Advance tax installments not paid on time' };
+}
+
+/* ── Main derive function ──────────────────────────────────────────────────── */
+
 export function derive(state){
   const cfg=CFG();
   const I=state.income||{},D=state.ded||{},P=state.profile||{};
@@ -128,8 +233,23 @@ export function derive(state){
   const totalOld=Math.max(0,taxOld)+spCess+gamingTax;
   const savings=totalOld-totalNew;
   const effRate=(totalNew/Math.max(1,gtiNew))*100;
-  const netPayableNew=totalNew-(I.tdsPaid||0);
-  const netPayableOld=totalOld-(I.tdsPaid||0);
+
+  // ── Interest u/s 234B & 234C ──────────────────────────────────────────────
+  const tds     = I.tdsPaid||0;
+  const advTax  = I.advTaxPaid||0;
+  const payDate = I.selfAssessDate||'';
+
+  const s234B_new = interest234B(totalNew, tds, advTax, payDate);
+  const s234C_new = interest234C(totalNew, tds, advTax);
+  const s234B_old = interest234B(totalOld, tds, advTax, payDate);
+  const s234C_old = interest234C(totalOld, tds, advTax);
+
+  const totalInterestNew = s234B_new.interest + s234C_new.interest;
+  const totalInterestOld = s234B_old.interest + s234C_old.interest;
+
+  // Net payable = tax − TDS − advance tax paid + interest
+  const netPayableNew = totalNew - tds - advTax + totalInterestNew;
+  const netPayableOld = totalOld - tds - advTax + totalInterestOld;
 
   let itrForm='ITR-1',itrReason='';
   const over50L=gtiNew>5000000;
@@ -143,7 +263,11 @@ export function derive(state){
     cat,isNri,hraEx,hpInc,netSalNew,netSalOld,profNet,totalBiz,ltcgTax,
     hasCG,hasFnO,hasPresumptive,spCess,gamingTax,savExUsed,gtiNew,gtiOld,
     c80C,c80CCD1B,c80CCD2,c80D,c80EEA,totalDed,normalNew,normalOld,
-    rNew,rOld,totalNew,totalOld,savings,effRate,netPayableNew,netPayableOld,
+    rNew,rOld,totalNew,totalOld,savings,effRate,
+    // Interest
+    s234B_new, s234C_new, s234B_old, s234C_old,
+    totalInterestNew, totalInterestOld,
+    netPayableNew, netPayableOld,
     itrForm,itrReason,auditeWarn:(I.grossProfessional||0)>7500000,over50L,
     doubleEntryWarn:(I.grossSalary>0)&&((I.grossProfessional>0)||(I.grossProfessionalReceipts>0)),
     cfg,
