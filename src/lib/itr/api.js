@@ -37,8 +37,18 @@ const api = {
       return ok({ profile });
     }
     if (url === '/ai/chat') {
-      // Return 'reply' key to match AITab's data.reply usage
-      return ok({ reply: 'The AI Advisor requires a backend connection which is not enabled in this standalone deployment. Use the Compare tab for a detailed regime-vs-regime breakdown and advance tax schedule.' });
+      try {
+        const res = await fetch('/api/ai-chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const json = await res.json();
+        if (!res.ok) return fail(json.error || 'AI request failed', res.status);
+        return ok(json);
+      } catch (e) {
+        return fail(e.message || 'Network error');
+      }
     }
     if (url === '/export/docx') return fail('DOCX export requires backend');
     return fail('Not implemented');
