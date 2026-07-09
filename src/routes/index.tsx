@@ -59,10 +59,5 @@ function App() {
 }
 
 function Index() {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
-  if (!mounted) {
-    return <div suppressHydrationWarning className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500">Loading ITReturn…</div>;
-  }
   return <App />;
 }
