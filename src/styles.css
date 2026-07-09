@@ -142,3 +142,37 @@
     color: var(--color-foreground);
   }
 }
+
+/* ── Indian Tax Agent Design System ─────────────────────── */
+@layer base {
+  body { font-feature-settings: "kern" 1; -webkit-font-smoothing: antialiased; }
+  input[type=number]::-webkit-inner-spin-button,
+  input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type=number] { -moz-appearance: textfield; }
+}
+
+@layer utilities {
+  .tabular { font-variant-numeric: tabular-nums; }
+  .glass {
+    background: rgba(255,255,255,0.06);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+}
+
+@keyframes glow-pulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(245,166,35,0); }
+  50%      { box-shadow: 0 0 0 6px rgba(245,166,35,0.22); }
+}
+.glow-gold { animation: glow-pulse 2.2s ease-in-out infinite; }
+
+@keyframes fade-in {
+  from { opacity:0; transform:translateY(6px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+.fade-in { animation: fade-in 0.25s ease both; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width:5px; height:5px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:#c7d2e0; border-radius:99px; }

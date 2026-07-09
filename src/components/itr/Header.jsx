@@ -2,6 +2,8 @@ import { useStore } from '@/lib/itr/store';
 import { derive, INR, CFG } from '@/lib/itr/taxEngine';
 import api from '@/lib/itr/api';
 
+const NAVY = '#0D1B2A';
+
 export default function Header() {
   const { user, logout, getState, profile: P } = useStore(s => ({
     user: s.user, logout: s.logout, getState: s.getState, profile: s.profile,
@@ -9,22 +11,19 @@ export default function Header() {
   const state = useStore(s => ({ profile: s.profile, income: s.income, ded: s.ded }));
   const d = derive(state);
   const cfg = CFG();
-  const best = d.savings >= 0;
+  const newWins = d.savings >= 0;
 
   const downloadDocx = async () => {
     try {
       const res = await api.post('/export/docx', getState(), { responseType: 'blob' });
       const url = URL.createObjectURL(new Blob([res.data]));
       const a = document.createElement('a');
-      a.href = url;
-      a.download = `Tax-Computation-${P.name || 'Taxpayer'}-${cfg.label}.docx`;
-      a.click();
+      a.href = url; a.download = `Tax-${P.name||'Taxpayer'}-${cfg.label}.docx`; a.click();
       URL.revokeObjectURL(url);
-    } catch { alert('DOCX generation failed. Check backend connection.'); }
+    } catch { alert('DOCX generation requires backend.'); }
   };
 
   const downloadPdf = () => {
-    // Build print window with computation sheet
     const win = window.open('', '_blank');
     if (!win) { alert('Allow pop-ups to download PDF.'); return; }
     win.document.write(buildPrintHTML(state, d, cfg));
@@ -32,57 +31,107 @@ export default function Header() {
   };
 
   return (
-    <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <header className="sticky top-0 z-30" style={{ background: NAVY }}>
+      {/* Top bar */}
       <div className="max-w-5xl mx-auto px-4">
-        <div className="flex items-center justify-between h-14">
-          <div>
-            <div className="font-bold text-slate-800 text-base">🇮🇳 Indian Tax Agent</div>
-            <div className="text-xs text-slate-400">{cfg.label} · {cfg.ay} · Deadline: {cfg.deadline}</div>
+        <div className="flex items-center justify-between" style={{ height: 60 }}>
+          {/* Brand */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg text-base"
+              style={{ background: '#F5A623' }}>
+              ₹
+            </div>
+            <div>
+              <div className="font-bold text-white text-sm tracking-tight">Indian Tax Agent</div>
+              <div className="text-xs" style={{ color: 'rgba(255,255,255,0.42)', letterSpacing: '0.04em' }}>
+                {cfg.label} · {cfg.ay} · Due {cfg.deadline}
+              </div>
+            </div>
           </div>
+
+          {/* Actions */}
           <div className="flex items-center gap-2">
             <button onClick={downloadDocx}
-              className="hidden sm:flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
-              📥 .docx
+              className="hidden sm:flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80"
+              style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.8)', border: '1px solid rgba(255,255,255,0.12)' }}>
+              ↓ DOCX
             </button>
             <button onClick={downloadPdf}
-              className="hidden sm:flex items-center gap-1.5 bg-slate-700 hover:bg-slate-800 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
-              📄 PDF
+              className="hidden sm:flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80"
+              style={{ background: '#F5A623', color: NAVY }}>
+              ↓ PDF
             </button>
             {user && (
-              <div className="flex items-center gap-2 ml-2">
-                <span className="text-xs text-slate-500 hidden sm:block">{user.name || user.email}</span>
-                <button onClick={logout}
-                  className="text-xs text-slate-400 hover:text-red-500 transition-colors">Sign out</button>
-              </div>
+              <button onClick={logout}
+                className="text-xs px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80"
+                style={{ color: 'rgba(255,255,255,0.5)' }}>
+                Sign out
+              </button>
             )}
           </div>
         </div>
 
-        {/* Summary pills */}
-        <div className="flex gap-2 pb-2 overflow-x-auto">
-          <Pill label="Tax (New)"  value={INR(d.totalNew)}         color="red" />
-          <Pill label="Tax (Old)"  value={INR(d.totalOld)}         color="amber" />
-          <Pill label={best?'New saves':'Old saves'} value={INR(Math.abs(d.savings))} color={best?'green':'red'} />
-          <Pill label="Eff. rate"  value={d.effRate.toFixed(1)+'%'} color="blue" />
-          <Pill label="ITR form"   value={d.itrForm}               color="purple" />
+        {/* Summary band */}
+        <div className="flex gap-2 pb-3 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+          <SummaryCard
+            label="New Regime Tax"
+            value={INR(d.totalNew)}
+            color="#E84545"
+            dimColor="rgba(232,69,69,0.18)"
+            glow={!newWins}
+          />
+          <SummaryCard
+            label="Old Regime Tax"
+            value={INR(d.totalOld)}
+            color="#E8A820"
+            dimColor="rgba(232,168,32,0.18)"
+            glow={false}
+          />
+          <SummaryCard
+            label={newWins ? 'New Saves' : 'Old Saves'}
+            value={INR(Math.abs(d.savings))}
+            color={newWins ? '#00B37E' : '#00B37E'}
+            dimColor="rgba(0,179,126,0.18)"
+            glow={true}
+            badge={newWins ? 'NEW ✓' : 'OLD ✓'}
+          />
+          <SummaryCard
+            label="Effective Rate"
+            value={d.effRate.toFixed(1) + '%'}
+            color="rgba(255,255,255,0.9)"
+            dimColor="rgba(255,255,255,0.08)"
+            glow={false}
+          />
+          <SummaryCard
+            label="ITR Form"
+            value={d.itrForm}
+            color="rgba(255,255,255,0.9)"
+            dimColor="rgba(255,255,255,0.08)"
+            glow={false}
+          />
         </div>
       </div>
     </header>
   );
 }
 
-function Pill({ label, value, color }) {
-  const colors = {
-    red:'bg-red-50 border-red-200 text-red-700',
-    amber:'bg-amber-50 border-amber-200 text-amber-700',
-    green:'bg-emerald-50 border-emerald-200 text-emerald-700',
-    blue:'bg-blue-50 border-blue-200 text-blue-700',
-    purple:'bg-violet-50 border-violet-200 text-violet-700',
-  };
+function SummaryCard({ label, value, color, dimColor, glow, badge }) {
   return (
-    <div className={`flex-shrink-0 border rounded-lg px-2.5 py-1 text-center ${colors[color]}`}>
-      <div className="text-xs opacity-70">{label}</div>
-      <div className="text-sm font-bold leading-tight">{value}</div>
+    <div
+      className={`flex-shrink-0 rounded-xl px-3 py-2 min-w-[100px] ${glow ? 'glow-gold' : ''}`}
+      style={{ background: dimColor, border: `1px solid ${color}22` }}
+    >
+      <div className="text-xs mb-1 font-medium" style={{ color: 'rgba(255,255,255,0.45)', letterSpacing:'0.05em' }}>
+        {label}
+      </div>
+      <div className="font-black tabular leading-tight flex items-center gap-1.5" style={{ color, fontSize: 15 }}>
+        {value}
+        {badge && (
+          <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: color, color: '#0D1B2A', fontSize: 9 }}>
+            {badge}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -99,9 +148,9 @@ function buildPrintHTML(state, d, cfg) {
   const row = (l,n,o,alt) =>
     `<tr${alt?' style="background:#f8fafc"':''}><td>${l}</td><td style="text-align:right">${n}</td><td style="text-align:right">${o}</td></tr>`;
   const rowT = (l,n,o) =>
-    `<tr style="background:#0f2847;color:white;font-weight:700"><td>${l}</td><td style="text-align:right">${n}</td><td style="text-align:right">${o}</td></tr>`;
+    `<tr style="background:#0D1B2A;color:white;font-weight:700"><td>${l}</td><td style="text-align:right">${n}</td><td style="text-align:right">${o}</td></tr>`;
   const hdr = (a,b,c) =>
-    `<tr style="background:#0f2847;color:white"><th style="text-align:left">${a}</th><th style="text-align:right">${b}</th><th style="text-align:right">${c}</th></tr>`;
+    `<tr style="background:#0D1B2A;color:white"><th style="text-align:left">${a}</th><th style="text-align:right">${b}</th><th style="text-align:right">${c}</th></tr>`;
 
   let ir='',ia=false;
   const ta=()=>{ia=!ia;return ia;};
@@ -134,13 +183,13 @@ function buildPrintHTML(state, d, cfg) {
 
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Tax Computation</title><style>
 body{font-family:-apple-system,sans-serif;font-size:12px;color:#0f172a;padding:24px;max-width:900px;margin:0 auto}
-h2{color:#1d4ed8;font-size:13px;margin:20px 0 8px;border-bottom:2px solid #bfdbfe;padding-bottom:4px}
+h2{color:#0D1B2A;font-size:13px;margin:20px 0 8px;border-bottom:2px solid #F5A623;padding-bottom:4px}
 table td,table th{padding:5px 8px;border:1px solid #e2e8f0}
 @media print{@page{margin:1.2cm;size:A4}body{padding:8px}}
 </style></head><body>
-<div style="background:linear-gradient(135deg,#1e3a5f,#0f2847);color:white;padding:16px;border-radius:8px;text-align:center;margin-bottom:20px">
-<div style="font-size:16px;font-weight:700">TAX COMPUTATION SHEET</div>
-<div style="font-size:10px;opacity:.8;margin-top:4px">Indian Tax Agent · ${cfg.label} (${cfg.ay}) · ${cfg.budget} · Generated: ${today}</div>
+<div style="background:linear-gradient(135deg,#0D1B2A,#1A3A5C);color:white;padding:20px;border-radius:8px;text-align:center;margin-bottom:20px">
+<div style="font-size:16px;font-weight:800;letter-spacing:-0.5px">TAX COMPUTATION SHEET</div>
+<div style="font-size:10px;opacity:.6;margin-top:4px">Indian Tax Agent · ${cfg.label} (${cfg.ay}) · Generated: ${today}</div>
 </div>
 <h2>1. Taxpayer Profile</h2>
 <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:11px">
