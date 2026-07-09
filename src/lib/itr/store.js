@@ -23,7 +23,7 @@ const defaultProfile = {
 export const useStore = create((set, get) => ({
   // Auth
   user: null,
-  token: localStorage.getItem('itax_token') || null,
+  token: (typeof window !== 'undefined' && localStorage.getItem('itax_token')) || 'local',
   setAuth: (user, token) => {
     localStorage.setItem('itax_token', token);
     set({ user, token });
