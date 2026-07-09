@@ -532,7 +532,7 @@ TAX: New regime: ${FF(d.normalNew)} taxable → ${FF(d.totalNew)}${d.rNew.rebate
           <div key={i} className={`flex gap-2 ${m.role==='user'?'flex-row-reverse':''}`}>
             <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs flex-shrink-0 ${m.role==='user'?'bg-blue-600 text-white':'bg-indigo-900 text-white'}`}>{m.role==='user'?'👤':'🤖'}</div>
             <div className={`max-w-xs sm:max-w-sm lg:max-w-md text-xs leading-relaxed rounded-xl px-3 py-2 ${m.role==='user'?'bg-blue-600 text-white':'bg-white border border-slate-200 text-slate-700'}`}
-              dangerouslySetInnerHTML={{ __html: m.content.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>') }} />
+              dangerouslySetInnerHTML={{ __html: (m.content || '').replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>') }} />
           </div>
         ))}
         {aiLoading && (

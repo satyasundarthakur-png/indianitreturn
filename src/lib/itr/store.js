@@ -1,5 +1,18 @@
 import { create } from 'zustand';
 
+// SSR-safe localStorage helper (Cloudflare Workers has window defined but NOT localStorage)
+const ls = {
+  get: (key) => {
+    try { return typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null; } catch { return null; }
+  },
+  set: (key, val) => {
+    try { if (typeof localStorage !== 'undefined') localStorage.setItem(key, val); } catch {}
+  },
+  remove: (key) => {
+    try { if (typeof localStorage !== 'undefined') localStorage.removeItem(key); } catch {}
+  },
+};
+
 const defaultIncome = {
   grossSalary:0,basic:0,da:0,hra:0,rentPaid:0,isMetro:false,lta:0,
   selfOccupied:true,homeLoanInterestHP:0,annualRent:0,municipalTax:0,
@@ -23,13 +36,13 @@ const defaultProfile = {
 export const useStore = create((set, get) => ({
   // Auth
   user: null,
-  token: (typeof window !== 'undefined' && localStorage.getItem('itax_token')) || 'local',
+  token: ls.get('itax_token') || 'local',
   setAuth: (user, token) => {
-    localStorage.setItem('itax_token', token);
+    ls.set('itax_token', token);
     set({ user, token });
   },
   logout: () => {
-    localStorage.removeItem('itax_token');
+    ls.remove('itax_token');
     set({ user: null, token: null });
   },
 
